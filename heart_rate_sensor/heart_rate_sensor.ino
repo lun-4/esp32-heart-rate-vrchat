@@ -25,7 +25,7 @@ uint16_t sensor_samples[100];
 uint8_t current_sample = 0;
 
 TickType_t ticks_since_last_signal_threshold = 0;
-uint16_t heart_rate = 0;
+uint8_t heart_rate = 0;
 
 #define pdTICKS_TO_MS( xTicks )   ( ( ( TickType_t ) ( xTicks ) * 1000u ) / configTICK_RATE_HZ )
 
@@ -54,7 +54,7 @@ void sense_task(void *param) {
     sensor_samples[current_sample++] = raw_sample;
     if (current_sample == 100) current_sample = 0;
 
-    // calculate threshold as 80% of the highest peak over
+    // calculate threshold as 75% of the highest peak over
     // last 100 samples
 
     uint16_t highest_sample = 0;
@@ -65,7 +65,7 @@ void sense_task(void *param) {
     }
 
     uint16_t total_delta = highest_sample - lowest_sample;
-    uint16_t threshold = total_delta * 0.20;
+    uint16_t threshold = total_delta * 0.25;
     uint16_t signal_beat_threshold = highest_sample - threshold;
 
 #ifdef GRAPH_SAMPLES
@@ -98,9 +98,9 @@ void sense_task(void *param) {
           // only calculate heart rate if we already had a beat beforehand
           if (ticks_since_last_signal_threshold > 0) {
             TickType_t heart_rate_as_ticks = beat_tick - ticks_since_last_signal_threshold;
-            double heart_rate_as_ms = pdTICKS_TO_MS(heart_rate_as_ticks);
-            double heart_rate_as_sec = heart_rate_as_ms / 1000;
-            heart_rate = (uint16_t)heart_rate_as_sec * 60;
+            uint32_t heart_rate_as_ms = pdTICKS_TO_MS(heart_rate_as_ticks);
+            float heart_rate_as_sec = heart_rate_as_ms / 1000.0f;
+            heart_rate = floor(heart_rate_as_sec * 60);
             #ifdef PRINT_RATE
             Serial.print("heart rate as ticks:");
             Serial.println(heart_rate_as_ticks);
@@ -111,6 +111,7 @@ void sense_task(void *param) {
             Serial.print("bpm:");
             Serial.println(heart_rate);
             #endif
+            analogWrite(10, 1023-map(raw_sample, lowest_sample, highest_sample, 0, 1023));
           }
           ticks_since_last_signal_threshold = beat_tick;
         }
@@ -123,7 +124,8 @@ void sense_task(void *param) {
     M5.Lcd.setCursor(50, 50);
     M5.Lcd.print(heart_rate, DEC);
     //M5.Lcd.print(map(d, val_min, val_max, 0, 1023), DEC);
-    //analogWrite(10, 1023-map(d, val_min, val_max, 0, 1023));
+    
     vTaskDelay(pdMS_TO_TICKS(20));
+    analogWrite(10, 1023);
   }
 }
