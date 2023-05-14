@@ -6,17 +6,23 @@
 #include <M5StickC.h>
 #endif
 
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include "wifi_credentials.h"
+
 void setup() {
   analogReadResolution(10);
   analogWriteResolution(10);
   pinMode(10, OUTPUT);
   pinMode(36, INPUT);
   M5.begin();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   M5.Lcd.print("hi");
   analogWrite(10, 1000);
   Serial.begin(9600);
 
   xTaskCreatePinnedToCore(sense_task, "sense", 10000, NULL, 10, NULL, 1);
+  xTaskCreatePinnedToCore(send_task, "send", 10000, NULL, 10, NULL, 1);
 }
 
 void loop() {}
@@ -127,5 +133,34 @@ void sense_task(void *param) {
     
     vTaskDelay(pdMS_TO_TICKS(20));
     analogWrite(10, 1023);
+  }
+}
+
+#define MSGBUF_LEN 32
+byte msgbuf[MSGBUF_LEN];
+
+
+void send_task(void *param) {
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+  }
+  Serial.println(" CONNECTED");
+  
+  while (1) {
+    OSCMessage heartrate_msg("/avatar/parameters/Heartrate");
+    heartrate_msg.add(heart_rate);
+
+    uint32_t msg_size = msg.bytes();
+    assert(msg_size < MSGBUF);
+    uint32_t written_bytes = msg.getBlob(0, &msgbuf);
+    assert(written_bytes == msg_size);
+ 
+    Udp.beginPacket("0.0.0.0", 9001);
+    for (int i = 0; i < msg_size; i++) {
+      Udp.write(msgbuf[i]);
+    }
+
+    Udp.endpacket();
   }
 }
