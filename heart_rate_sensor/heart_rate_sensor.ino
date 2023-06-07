@@ -8,7 +8,8 @@
 
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include "wifi_credentials.h"
+#include <OSCMessage.h>
+#include "config.h"
 
 void setup() {
   analogReadResolution(10);
@@ -136,8 +137,29 @@ void sense_task(void *param) {
   }
 }
 
-#define MSGBUF_LEN 32
-byte msgbuf[MSGBUF_LEN];
+#define MSGBUF_LEN 128
+
+WiFiUDP udp;
+
+// turn msgbuf into Print-able
+// i dont know what im doing
+class MessageBuffer : public Print {
+  public:
+    MessageBuffer();
+    uint8_t the_bytes[MSGBUF_LEN];
+    size_t cursor = 0;
+    virtual size_t write(uint8_t);
+};
+
+MessageBuffer::MessageBuffer() {
+  
+}
+
+size_t MessageBuffer::write(uint8_t character) {
+ the_bytes[cursor] = character;
+ cursor++;
+ return 1;
+}
 
 
 void send_task(void *param) {
@@ -148,19 +170,24 @@ void send_task(void *param) {
   Serial.println(" CONNECTED");
   
   while (1) {
+    MessageBuffer msgbuf;
+    memset(msgbuf.the_bytes,0,MSGBUF_LEN);
+
     OSCMessage heartrate_msg("/avatar/parameters/Heartrate");
     heartrate_msg.add(heart_rate);
 
-    uint32_t msg_size = msg.bytes();
-    assert(msg_size < MSGBUF);
-    uint32_t written_bytes = msg.getBlob(0, &msgbuf);
-    assert(written_bytes == msg_size);
+    uint32_t msg_size = heartrate_msg.bytes();
+    assert(msg_size < MSGBUF_LEN);
+    MessageBuffer& ref = msgbuf;
+    heartrate_msg.send(ref);
+    assert(msgbuf.cursor == msg_size);
  
-    Udp.beginPacket("0.0.0.0", 9001);
+    udp.beginPacket(OSC_HOST, OSC_PORT);
     for (int i = 0; i < msg_size; i++) {
-      Udp.write(msgbuf[i]);
+      udp.write(msgbuf.the_bytes[i]);
     }
 
-    Udp.endpacket();
+    udp.endPacket();
+    vTaskDelay(pdMS_TO_TICKS(700));
   }
 }
