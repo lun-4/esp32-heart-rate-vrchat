@@ -161,6 +161,10 @@ size_t MessageBuffer::write(uint8_t character) {
  return 1;
 }
 
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 void send_task(void *param) {
   while (WiFi.status() != WL_CONNECTED) {
@@ -174,7 +178,12 @@ void send_task(void *param) {
     memset(msgbuf.the_bytes,0,MSGBUF_LEN);
 
     OSCMessage heartrate_msg("/avatar/parameters/Heartrate");
-    heartrate_msg.add(heart_rate);
+    float heart_rate_as_mapped_float = mapfloat(heart_rate, 0, 256, 0, 1);
+    #ifdef PRINT_RATE
+    Serial.println("wifi, mapped value:");
+    Serial.println(heart_rate_as_mapped_float);
+    #endif
+    heartrate_msg.add(heart_rate_as_mapped_float);
 
     uint32_t msg_size = heartrate_msg.bytes();
     assert(msg_size < MSGBUF_LEN);
@@ -188,6 +197,6 @@ void send_task(void *param) {
     }
 
     udp.endPacket();
-    vTaskDelay(pdMS_TO_TICKS(700));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
