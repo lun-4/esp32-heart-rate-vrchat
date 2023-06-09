@@ -169,9 +169,13 @@ float mapfloat(float x, float in_min, float in_max, float out_min, float out_max
 void send_task(void *param) {
   while (WiFi.status() != WL_CONNECTED) {
       delay(500);
+      #ifdef PRINT_RATE
       Serial.print(".");
+      #endif
   }
+  #ifdef PRINT_RATE
   Serial.println(" CONNECTED");
+  #endif
   
   while (1) {
     MessageBuffer msgbuf;
