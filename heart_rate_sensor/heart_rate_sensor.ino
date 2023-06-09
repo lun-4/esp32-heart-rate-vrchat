@@ -151,20 +151,20 @@ void sense_task(void *param) {
   }
 }
 
-void maybe_submit_heart_rate(uint8_t new_heart_rate) {
+inline void maybe_submit_heart_rate(uint8_t new_heart_rate) {
   // validate if derived sensor data makes sense
   // by checking absolute difference between old and new value
   //
   // (ignoring if it's been longer than 10 seconds since last submission)
   TickType_t current_tick = xTaskGetTickCount();
   TickType_t ticks_since_last_submission = current_tick - last_heart_rate_submission;
-  bool is_last_submission_old = pdTICKS_TO_MS(ticks_since_last_submission) > (8 * 1000);
+  bool is_last_submission_new = pdTICKS_TO_MS(ticks_since_last_submission) < (8 * 1000);
   bool is_first_submission = last_heart_rate_submission == 0;
-  bool is_last_submission_usable = (!is_first_submission) || (!is_last_submission_old);
+  bool is_last_submission_usable = (!is_first_submission) && is_last_submission_new;
 
   #ifdef PRINT_RATE
-  Serial.print("is last submission old? ");
-  Serial.println(is_last_submission_old);
+  Serial.print("is last submission new? ");
+  Serial.println(is_last_submission_new);
   Serial.print("is first submission? ");
   Serial.println(is_first_submission);
   Serial.print("is last submission usable? ");
