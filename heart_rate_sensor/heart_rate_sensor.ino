@@ -32,6 +32,8 @@ uint16_t sensor_samples[100];
 uint8_t current_sample = 0;
 
 TickType_t ticks_since_last_signal_threshold = 0;
+
+TickType_t last_heart_rate_submission = 0;
 uint8_t heart_rate = 0;
 
 #define pdTICKS_TO_MS( xTicks )   ( ( ( TickType_t ) ( xTicks ) * 1000u ) / configTICK_RATE_HZ )
@@ -104,30 +106,32 @@ void sense_task(void *param) {
 
           // only calculate heart rate if we already had a beat beforehand
           if (ticks_since_last_signal_threshold > 0) {
+
+            // from ticks, to ms, to seconds, to minutes
             TickType_t heart_rate_as_ticks = beat_tick - ticks_since_last_signal_threshold;
             uint32_t heart_rate_as_ms = pdTICKS_TO_MS(heart_rate_as_ticks);
             float heart_rate_as_sec = heart_rate_as_ms / 1000.0f;
             uint8_t new_heart_rate = floor(heart_rate_as_sec * 60);
-            uint8_t heart_rate_delta = abs(new_heart_rate - heart_rate);
-            if (heart_rate > 0) {
-              if (heart_rate_delta > 100) {
-                // ignore high delta
-              } else {
-                heart_rate = new_heart_rate;
-              }
-            } else {
-              heart_rate = new_heart_rate;
-            }
+
+
             #ifdef PRINT_RATE
             Serial.print("heart rate as ticks:");
             Serial.println(heart_rate_as_ticks);
             Serial.print("heart rate as ms:");
             Serial.println(heart_rate_as_ms);
-            Serial.print("heart rate as sec");
+            Serial.print("heart rate as sec: ");
             Serial.println(heart_rate_as_sec);
-            Serial.print("bpm:");
+            Serial.print("new bpm: ");
+            Serial.println(new_heart_rate);
+            #endif
+
+            maybe_submit_heart_rate(new_heart_rate);
+
+            #ifdef PRINT_RATE
+            Serial.print("real bpm: ");
             Serial.println(heart_rate);
             #endif
+
             analogWrite(10, 1023-map(raw_sample, lowest_sample, highest_sample, 0, 1023));
           }
           ticks_since_last_signal_threshold = beat_tick;
@@ -144,6 +148,56 @@ void sense_task(void *param) {
     
     vTaskDelay(pdMS_TO_TICKS(20));
     analogWrite(10, 1023);
+  }
+}
+
+void maybe_submit_heart_rate(uint8_t new_heart_rate) {
+  // validate if derived sensor data makes sense
+  // by checking absolute difference between old and new value
+  //
+  // (ignoring if it's been longer than 10 seconds since last submission)
+  TickType_t current_tick = xTaskGetTickCount();
+  TickType_t ticks_since_last_submission = current_tick - last_heart_rate_submission;
+  bool is_last_submission_old = pdTICKS_TO_MS(ticks_since_last_submission) > (8 * 1000);
+  bool is_first_submission = last_heart_rate_submission == 0;
+  bool is_last_submission_usable = (!is_first_submission) || (!is_last_submission_old);
+
+  #ifdef PRINT_RATE
+  Serial.print("is last submission old? ");
+  Serial.println(is_last_submission_old);
+  Serial.print("is first submission? ");
+  Serial.println(is_first_submission);
+  Serial.print("is last submission usable? ");
+  Serial.println(is_last_submission_usable);
+  #endif
+
+  bool submit = false;
+  if (is_last_submission_usable) {
+    uint8_t heart_rate_delta = abs(new_heart_rate - heart_rate);
+    #ifdef PRINT_RATE
+    Serial.print("rate delta:");
+    Serial.println(heart_rate_delta);
+    #endif
+    // i dont think heart rates dont go up by 35 in 8 seconds
+    // this is done to reduce noise causing high jumps in bpm rate
+    if (heart_rate_delta > 35) {
+      submit = false;
+    } else {
+      // we good
+      submit = true;
+    }
+  } else {
+    submit = true;
+  }
+
+  #ifdef PRINT_RATE
+  Serial.print("submit? ");
+  Serial.println(submit);
+  #endif
+
+  if (submit) {
+    heart_rate = new_heart_rate;
+    last_heart_rate_submission = current_tick;
   }
 }
 
