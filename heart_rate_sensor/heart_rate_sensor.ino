@@ -107,7 +107,17 @@ void sense_task(void *param) {
             TickType_t heart_rate_as_ticks = beat_tick - ticks_since_last_signal_threshold;
             uint32_t heart_rate_as_ms = pdTICKS_TO_MS(heart_rate_as_ticks);
             float heart_rate_as_sec = heart_rate_as_ms / 1000.0f;
-            heart_rate = floor(heart_rate_as_sec * 60);
+            uint8_t new_heart_rate = floor(heart_rate_as_sec * 60);
+            uint8_t heart_rate_delta = abs(new_heart_rate - heart_rate);
+            if (heart_rate > 0) {
+              if (heart_rate_delta > 100) {
+                // ignore high delta
+              } else {
+                heart_rate = new_heart_rate;
+              }
+            } else {
+              heart_rate = new_heart_rate;
+            }
             #ifdef PRINT_RATE
             Serial.print("heart rate as ticks:");
             Serial.println(heart_rate_as_ticks);
